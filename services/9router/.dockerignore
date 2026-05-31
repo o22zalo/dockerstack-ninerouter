@@ -1,0 +1,7 @@
+README.md
+*.md
+.env
+.env.*
+node_modules
+.git
+.docker-volumes

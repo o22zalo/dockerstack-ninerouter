@@ -1,0 +1,131 @@
+# ================================================================
+#  compose.ninerouter.yml — Application Layer (auto-generated)
+#
+#  ⚠️  KHÔNG SỬA TAY. File này được render bởi:
+#       node docker-compose/scripts/render-ninerouter.js
+#
+#  Mỗi phiên bản 9router là 1 service riêng:
+#    service name      : ninerouter-<slug>
+#    container name    : main-ninerouter-<slug>
+#    image             : decolua/9router:<NINE_ROUTER_IMAGE_TAG_<KEY>>
+#    public subdomain  : <slug>.${DOMAIN}
+#    data volume       : ${DOCKER_VOLUMES_ROOT}/ninerouter/<slug>/data
+#
+#  Auth: 9router tự xử lý nội bộ (JWT). KHÔNG dùng Tinyauth forward_auth
+#        cho service này.
+#
+#  Để thêm 1 phiên bản mới:
+#    1. Vào .env, copy block ENV của 1 version có sẵn, đổi suffix KEY
+#       (ví dụ V0459).
+#    2. Set NINE_ROUTER_ENABLE_V0459=true,
+#           NINE_ROUTER_IMAGE_TAG_V0459=0.4.59,
+#           NINE_ROUTER_SUBDOMAIN_V0459=v0459,
+#           NINE_ROUTER_HOST_PORT_V0459=<port>.
+#    3. Thêm V0459 vào NINE_ROUTER_VERSIONS (hoặc bỏ qua bước này — script
+#       tự auto-discover ENABLE_*=true).
+#    4. Chạy: npm run dockerapp-exec:up
+#       (dc.sh sẽ tự render lại file này trước khi gọi docker compose).
+# ================================================================
+
+services:
+  ninerouter-latest:
+    container_name: "main-ninerouter-latest"
+    image: "${PROJECT_NAME:-dockerstack-ninerouter}-9router:latest"
+    build:
+      context: ./services/9router
+      dockerfile: Dockerfile
+      args:
+        NINE_ROUTER_VERSION_TAG: "latest"
+    env_file:
+      - ./.env
+    environment:
+      PORT: "20128"
+      NODE_ENV: "production"
+      DATA_DIR: "/app/data"
+      JWT_SECRET: "change-me-to-a-long-random-secret"
+      INITIAL_PASSWORD: "change-me"
+      API_KEY_SECRET: "endpoint-proxy-api-key-secret"
+      MACHINE_ID_SALT: "endpoint-proxy-salt"
+      ENABLE_REQUEST_LOGS: "false"
+      OBSERVABILITY_ENABLED: "true"
+      AUTH_COOKIE_SECURE: "false"
+      REQUIRE_API_KEY: "false"
+      CLOUD_URL: "https://9router.com"
+      HOSTNAME: "0.0.0.0"
+      BASE_URL: "https://latest.${DOMAIN}"
+      NEXT_PUBLIC_BASE_URL: "https://latest.${DOMAIN}"
+    ports:
+      - "127.0.0.1:20128:20128"
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/ninerouter/latest/data:/app/data
+    labels:
+      - "caddy=http://latest.${DOMAIN}, http://latest.${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 20128}}"
+      - "caddy.reverse_proxy.flush_interval=-1"
+      - "caddy_1=https://latest.${PROJECT_NAME_TAILSCALE:-dockerstack-ninerouter}.${TAILSCALE_TAILNET_DOMAIN:-tailnet.local}"
+      - "caddy_1.tls=internal"
+      - "caddy_1.reverse_proxy={{upstreams 20128}}"
+      - "caddy_1.reverse_proxy.flush_interval=-1"
+    networks: [app_net]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "sh"
+        - "-c"
+        - "wget -qO- http://localhost:20128/api/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ninerouter-v0446:
+    container_name: "main-ninerouter-v0446"
+    image: "${PROJECT_NAME:-dockerstack-ninerouter}-9router:v0446"
+    build:
+      context: ./services/9router
+      dockerfile: Dockerfile
+      args:
+        NINE_ROUTER_VERSION_TAG: "0.4.46"
+    env_file:
+      - ./.env
+    environment:
+      PORT: "20128"
+      NODE_ENV: "production"
+      DATA_DIR: "/app/data"
+      JWT_SECRET: "change-me-to-a-long-random-secret"
+      INITIAL_PASSWORD: "change-me"
+      API_KEY_SECRET: "endpoint-proxy-api-key-secret"
+      MACHINE_ID_SALT: "endpoint-proxy-salt"
+      ENABLE_REQUEST_LOGS: "false"
+      OBSERVABILITY_ENABLED: "true"
+      AUTH_COOKIE_SECURE: "false"
+      REQUIRE_API_KEY: "false"
+      CLOUD_URL: "https://9router.com"
+      HOSTNAME: "0.0.0.0"
+      BASE_URL: "https://v0446.${DOMAIN}"
+      NEXT_PUBLIC_BASE_URL: "https://v0446.${DOMAIN}"
+    ports:
+      - "127.0.0.1:20129:20128"
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/ninerouter/v0446/data:/app/data
+    labels:
+      - "caddy=http://v0446.${DOMAIN}, http://v0446.${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 20128}}"
+      - "caddy.reverse_proxy.flush_interval=-1"
+      - "caddy_1=https://v0446.${PROJECT_NAME_TAILSCALE:-dockerstack-ninerouter}.${TAILSCALE_TAILNET_DOMAIN:-tailnet.local}"
+      - "caddy_1.tls=internal"
+      - "caddy_1.reverse_proxy={{upstreams 20128}}"
+      - "caddy_1.reverse_proxy.flush_interval=-1"
+    networks: [app_net]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "sh"
+        - "-c"
+        - "wget -qO- http://localhost:20128/api/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

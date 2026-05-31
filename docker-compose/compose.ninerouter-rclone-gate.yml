@@ -1,0 +1,21 @@
+# ================================================================
+#  compose.ninerouter-rclone-gate.yml — auto-generated
+#
+#  ⚠️  KHÔNG SỬA TAY. Render bởi:
+#       node docker-compose/scripts/render-ninerouter.js
+#
+#  File này CHỈ được dc.sh nạp khi ENABLE_RCLONE=true.
+#  Mỗi ninerouter-<slug> được thêm depends_on rclone-restore để đảm bảo
+#  data đã được kéo về ${DOCKER_VOLUMES_ROOT} trước khi container start.
+# ================================================================
+
+services:
+  ninerouter-latest:
+    depends_on:
+      rclone-restore:
+        condition: service_completed_successfully
+
+  ninerouter-v0446:
+    depends_on:
+      rclone-restore:
+        condition: service_completed_successfully

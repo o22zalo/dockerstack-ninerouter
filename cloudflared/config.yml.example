@@ -1,0 +1,58 @@
+# ================================================================
+#  cloudflared/config.yml.example
+#  Template for Cloudflare Tunnel ingress config (dockerstack-ninerouter).
+#
+#  To create manually:
+#    1. Copy this file to cloudflared/config.yml
+#    2. Fill in TUNNEL_ID (from: cloudflared tunnel list)
+#    3. Update hostnames to match your .env / DNS plan
+#    4. Add one entry per enabled 9router version (NINE_ROUTER_ENABLE_<KEY>=true)
+#    5. Remove any entries for services you keep disabled
+#    6. Add matching DNS records in Cloudflare dashboard (CNAME → <TUNNEL_ID>.cfargotunnel.com)
+# ================================================================
+
+# Get from: cloudflared tunnel list  OR  Cloudflare Zero Trust dashboard
+tunnel: <YOUR-TUNNEL-ID>
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # ── 9router (multi-version) ────────────────────────────────────
+  # Enabled when NINE_ROUTER_ENABLE_<KEY>=true (per .env)
+  # Subdomain pattern: <slug>.${DOMAIN}, where slug = NINE_ROUTER_SUBDOMAIN_<KEY> (lowercase)
+  # Add one ingress rule per enabled version. Example below uses latest + v0446.
+  - hostname: latest.example.com
+    service: http://caddy:80
+
+  - hostname: v0446.example.com
+    service: http://caddy:80
+
+  # ── Dozzle: real-time log viewer ───────────────────────────────
+  # Enabled when ENABLE_DOZZLE=true (subdomain: logs.${DOMAIN})
+  - hostname: logs.example.com
+    service: http://caddy:80
+
+  # ── Filebrowser: log file manager ─────────────────────────────
+  # Enabled when ENABLE_FILEBROWSER=true
+  - hostname: files.example.com
+    service: http://caddy:80
+
+  # ── Deploy Code: optional self-deploy UI/API ───────────────────
+  # Enabled when DOCKER_DEPLOY_CODE_ENABLED=true
+  - hostname: deploy.example.com
+    service: http://caddy:80
+
+  # ── WebSSH: browser terminal ──────────────────────────────────
+  # Enabled when ENABLE_WEBSSH=true
+  # ⚠️  Protect with Cloudflare Access or Tailscale for production!
+  - hostname: ttyd.example.com
+    service: http://caddy:80
+
+  # ── Tinyauth: authentication portal ────────────────────────────
+  # Always required when ops services use Tinyauth forward_auth.
+  # NOTE: 9router routes do NOT use Tinyauth (the app handles auth internally),
+  # but ops services (dozzle/files/ttyd/deploy) still go through Tinyauth.
+  - hostname: auth.example.com
+    service: http://caddy:80
+
+  # ── Catch-all: return 404 for any unlisted hostnames ──────────
+  - service: http_status:404

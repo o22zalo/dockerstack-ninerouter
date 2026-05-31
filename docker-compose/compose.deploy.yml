@@ -1,0 +1,91 @@
+# ================================================================
+#  compose.deploy.yml — Deploy Code Sidecar Layer
+#  Optional self-deploy/update service, kept separate from app layer.
+#
+#  Enable with:
+#    DOCKER_DEPLOY_CODE_ENABLED=true
+#
+#  Service:
+#    deploy-code — Git/ZIP source updater + targeted Docker Compose redeploy
+# ================================================================
+
+services:
+  deploy-code:
+    profiles: [deploy-code]
+    image: "${PROJECT_NAME:-myapp}-deploy-code:local"
+    container_name: "deploy-code"
+    build:
+      context: ./services/deploy-code
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+    environment:
+      DOCKER_DEPLOY_CODE_ENABLED: "${DOCKER_DEPLOY_CODE_ENABLED:-false}"
+      DOCKER_DEPLOY_CODE_PORT: "${DOCKER_DEPLOY_CODE_PORT:-53999}"
+      DOCKER_DEPLOY_CODE_REPO_DIR: "${DOCKER_DEPLOY_CODE_REPO_DIR:-/workspace}"
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: "safe.directory"
+      GIT_CONFIG_VALUE_0: "${DOCKER_DEPLOY_CODE_REPO_DIR:-/workspace}"
+      DOCKER_DEPLOY_CODE_BRANCH: "${DOCKER_DEPLOY_CODE_BRANCH:-main}"
+      DOCKER_DEPLOY_CODE_REMOTE: "${DOCKER_DEPLOY_CODE_REMOTE:-origin}"
+      DOCKER_DEPLOY_CODE_GIT_CLEAN: "${DOCKER_DEPLOY_CODE_GIT_CLEAN:-false}"
+      DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT: "${DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT:-docker-compose/scripts/dc.sh}"
+      DOCKER_DEPLOY_CODE_DEPLOY_SERVICES: "${DOCKER_DEPLOY_CODE_DEPLOY_SERVICES:-app}"
+      DOCKER_DEPLOY_CODE_RESTART_CONTAINERS: "${DOCKER_DEPLOY_CODE_RESTART_CONTAINERS:-}"
+      DOCKER_DEPLOY_CODE_DEPLOY_COMMAND: "${DOCKER_DEPLOY_CODE_DEPLOY_COMMAND:-}"
+      DOCKER_DEPLOY_CODE_POST_DEPLOY_COMMAND: "${DOCKER_DEPLOY_CODE_POST_DEPLOY_COMMAND:-}"
+      DOCKER_DEPLOY_CODE_ENV_FILE: "${DOCKER_DEPLOY_CODE_ENV_FILE:-.env}"
+      DOCKER_DEPLOY_CODE_ENV_COMMIT_ID_KEY: "${DOCKER_DEPLOY_CODE_ENV_COMMIT_ID_KEY:-_DOTENVRTDB_RUNNER_COMMIT_ID}"
+      DOCKER_DEPLOY_CODE_ENV_COMMIT_SHORT_ID_KEY: "${DOCKER_DEPLOY_CODE_ENV_COMMIT_SHORT_ID_KEY:-_DOTENVRTDB_RUNNER_COMMIT_SHORT_ID}"
+      DOCKER_DEPLOY_CODE_ENV_COMMIT_AT_KEY: "${DOCKER_DEPLOY_CODE_ENV_COMMIT_AT_KEY:-_DOTENVRTDB_RUNNER_COMMIT_AT}"
+      DOCKER_DEPLOY_CODE_POLL_ENABLED: "${DOCKER_DEPLOY_CODE_POLL_ENABLED:-false}"
+      DOCKER_DEPLOY_CODE_POLL_INTERVAL_SEC: "${DOCKER_DEPLOY_CODE_POLL_INTERVAL_SEC:-300}"
+      DOCKER_DEPLOY_CODE_AUTO_DEPLOY_ON_CHANGE: "${DOCKER_DEPLOY_CODE_AUTO_DEPLOY_ON_CHANGE:-false}"
+      DOCKER_DEPLOY_CODE_RUN_ON_START: "${DOCKER_DEPLOY_CODE_RUN_ON_START:-false}"
+      DOCKER_DEPLOY_CODE_API_TOKEN: "${DOCKER_DEPLOY_CODE_API_TOKEN:-}"
+      DOCKER_DEPLOY_CODE_REQUIRE_TOKEN: "${DOCKER_DEPLOY_CODE_REQUIRE_TOKEN:-true}"
+      DOCKER_DEPLOY_CODE_LOG_DIR: "${DOCKER_DEPLOY_CODE_LOG_DIR:-/app/logs}"
+      DOCKER_DEPLOY_CODE_BACKUP_DIR: "${DOCKER_DEPLOY_CODE_BACKUP_DIR:-/app/backups}"
+      DOCKER_DEPLOY_CODE_TEMP_DIR: "${DOCKER_DEPLOY_CODE_TEMP_DIR:-/tmp/deploy-code}"
+      DOCKER_DEPLOY_CODE_LOG_TAIL_LINES: "${DOCKER_DEPLOY_CODE_LOG_TAIL_LINES:-200}"
+      DOCKER_DEPLOY_CODE_ZIP_MAX_MB: "${DOCKER_DEPLOY_CODE_ZIP_MAX_MB:-200}"
+      DOCKER_DEPLOY_CODE_ZIP_STRIP_TOP_LEVEL: "${DOCKER_DEPLOY_CODE_ZIP_STRIP_TOP_LEVEL:-true}"
+      DOCKER_DEPLOY_CODE_ZIP_DELETE_MISSING: "${DOCKER_DEPLOY_CODE_ZIP_DELETE_MISSING:-false}"
+      DOCKER_DEPLOY_CODE_ZIP_BACKUP_BEFORE_APPLY: "${DOCKER_DEPLOY_CODE_ZIP_BACKUP_BEFORE_APPLY:-true}"
+      DOCKER_DEPLOY_CODE_ZIP_EXCLUDES: "${DOCKER_DEPLOY_CODE_ZIP_EXCLUDES:-.git,.env,.docker-volumes,node_modules}"
+      DOCKER_DEPLOY_CODE_ZIP_DEPLOY_AFTER_APPLY: "${DOCKER_DEPLOY_CODE_ZIP_DEPLOY_AFTER_APPLY:-true}"
+      DOCKER_DEPLOY_CODE_CONTAINER_CONTROL_ENABLED: "${DOCKER_DEPLOY_CODE_CONTAINER_CONTROL_ENABLED:-true}"
+      DOCKER_DEPLOY_CODE_CONTAINER_ALLOW_ALL: "${DOCKER_DEPLOY_CODE_CONTAINER_ALLOW_ALL:-false}"
+      DOCKER_DEPLOY_CODE_SERVICE_ALLOWLIST: "${DOCKER_DEPLOY_CODE_SERVICE_ALLOWLIST:-app}"
+      DOCKER_DEPLOY_CODE_CONTAINER_ALLOWLIST: "${DOCKER_DEPLOY_CODE_CONTAINER_ALLOWLIST:-main-app,deploy-code}"
+      DOCKER_DEPLOY_CODE_CONTAINER_LOG_DEFAULT_LINES: "${DOCKER_DEPLOY_CODE_CONTAINER_LOG_DEFAULT_LINES:-200}"
+      DOCKER_DEPLOY_CODE_CONTAINER_LOG_MAX_LINES: "${DOCKER_DEPLOY_CODE_CONTAINER_LOG_MAX_LINES:-2000}"
+      DOCKER_DEPLOY_CODE_CONTAINER_ACTION_TIMEOUT_SEC: "${DOCKER_DEPLOY_CODE_CONTAINER_ACTION_TIMEOUT_SEC:-600}"
+    working_dir: /app
+    volumes:
+      - ./:/workspace
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/deploy-code/logs:/app/logs
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/deploy-code/backups:/app/backups
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/deploy-code/tmp:/tmp/deploy-code
+    ports:
+      - "${OPS_HOST_BIND_IP:-127.0.0.1}:${DOCKER_DEPLOY_CODE_HOST_PORT:-15399}:${DOCKER_DEPLOY_CODE_PORT:-53999}"
+    labels:
+      - "caddy=http://${DOCKER_DEPLOY_CODE_CADDY_HOSTS:-deploy.localhost}"
+      - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
+      - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
+      - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
+      - "caddy.reverse_proxy={{upstreams ${DOCKER_DEPLOY_CODE_PORT:-53999}}}"
+    networks: [app_net]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "sh"
+        - "-c"
+        - "wget -qO- http://localhost:${DOCKER_DEPLOY_CODE_PORT:-53999}/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

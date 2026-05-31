@@ -1,0 +1,128 @@
+# ================================================================
+#  compose.ops.yml — Operational Tools
+#  Feature-flagged via ENABLE_* env vars → dc.sh sets --profile
+#
+#  Profiles:
+#    dozzle         — real-time container log viewer
+#    filebrowser    — web file manager (mounts workspace + .docker-volumes)
+#    webssh-linux   — browser SSH terminal (Linux runner)
+#    webssh-windows — socat bridge to host ttyd (Windows runner)
+#
+#  Subdomain convention (auto-generated, no manual config):
+#    logs.${PROJECT_NAME}.${DOMAIN}
+#    files.${PROJECT_NAME}.${DOMAIN}
+#    ttyd.${PROJECT_NAME}.${DOMAIN}
+#
+#  Optional localhost ports for Tailscale/host access:
+#    DOZZLE_HOST_PORT=18080
+#    FILEBROWSER_HOST_PORT=18081
+#    WEBSSH_HOST_PORT=17681
+#  Optional bind IP for direct Tailnet access by host ports:
+#    OPS_HOST_BIND_IP=0.0.0.0
+# ================================================================
+
+services:
+  # ── Dozzle: real-time container logs ──────────────────────────
+  dozzle:
+    container_name: "dozzle"
+    profiles: [dozzle]
+    image: amir20/dozzle:v10.3.3
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_NO_ANALYTICS: "true"
+    ports:
+      - "${OPS_HOST_BIND_IP:-127.0.0.1}:${DOZZLE_HOST_PORT:-18080}:8080"
+    labels:
+      - "caddy=http://logs.${PROJECT_NAME}.${DOMAIN}, http://logs.${DOMAIN}, http://dozzle.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 8080}}"
+      # Lỗi aborting with incomplete response với SSE (text/event-stream) qua Caddy reverse proxy
+      #   — cần thêm flush_interval -1 để Caddy không buffer response mà stream thẳng về client.
+      - "caddy.reverse_proxy.flush_interval=-1" # ← thêm dòng này
+      - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
+      - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
+      - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── Filebrowser: browse and download log files ─────────────────
+  filebrowser:
+    container_name: "filebrowser"
+    profiles: [filebrowser]
+    image: filebrowser/filebrowser:v2.30.0
+    command: --noauth --port 80 --root /srv --database /database/filebrowser.db
+    ports:
+      - "${OPS_HOST_BIND_IP:-127.0.0.1}:${FILEBROWSER_HOST_PORT:-18081}:80"
+    volumes:
+      - .:/srv/workspace # browse all project files
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}:/srv/docker-volumes:ro # all runtime data of services
+      - ./logs:/srv/logs:ro # optional direct logs shortcut
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/filebrowser/database:/database
+    labels:
+      - "caddy=http://files.${PROJECT_NAME}.${DOMAIN}, http://files.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 80}}"
+      - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
+      - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
+      - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── WebSSH (Linux): ttyd container → SSH into host runner ──────
+  webssh:
+    container_name: "webssh"
+    profiles: [webssh-linux]
+    build: ./services/webssh
+    command:
+      - "ttyd"
+      - "-W"
+      - "ssh"
+      - "-i"
+      - "/root/.ssh/id_rsa"
+      - "-o"
+      - "StrictHostKeyChecking=no"
+      - "-o"
+      - "UserKnownHostsFile=/dev/null"
+      - "-o"
+      - "ConnectTimeout=10"
+      - "-t"
+      - "${CUR_WHOAMI:-runner}@host.docker.internal"
+      - "cd ${CUR_WORK_DIR:-/home/runner} && exec ${SHELL:-/bin/bash}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${OPS_HOST_BIND_IP:-127.0.0.1}:${WEBSSH_HOST_PORT:-17681}:7681"
+    volumes:
+      - ./services/webssh/.ssh:/root/.ssh:ro
+    labels:
+      - "caddy=http://ttyd.${PROJECT_NAME}.${DOMAIN}, http://ttyd.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 7681}}"
+      - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
+      - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
+      - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── WebSSH (Windows): socat bridge → host ttyd process ─────────
+  webssh-windows:
+    container_name: "webssh-windows"
+    profiles: [webssh-windows]
+    image: alpine/socat:latest
+    command: >
+      TCP-LISTEN:7681,fork,reuseaddr
+      TCP:host.docker.internal:7681
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${OPS_HOST_BIND_IP:-127.0.0.1}:${WEBSSH_HOST_PORT:-17681}:7681"
+    labels:
+      - "caddy=http://ttyd.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 7681}}"
+      - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
+      - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
+      - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
+    networks: [app_net]
+    restart: unless-stopped

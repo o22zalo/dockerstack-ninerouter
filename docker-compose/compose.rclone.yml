@@ -1,0 +1,105 @@
+# ================================================================
+#  compose.rclone.yml — Rclone 3-stage stack
+#
+#  Container chính của repo restart mỗi 60 phút.
+#  → Mỗi lần khởi động lại phải kéo data từ remote về .docker-volumes
+#    TRƯỚC KHI app start, và liên tục đẩy data lên remote khi app chạy.
+#
+#  Kiến trúc 3 service:
+#
+#    rclone-init     (one-shot)
+#       └─ Decode RCLONE_CONFIG_BASE64 → /config/rclone/rclone.conf
+#       └─ Validate config + list remotes
+#
+#    rclone-restore  (one-shot, depends_on: rclone-init)
+#       └─ Pull remote → local (.docker-volumes)
+#
+#    rclone-sync     (sidecar, depends_on: rclone-restore)
+#       └─ Push local → remote định kỳ (mỗi RCLONE_SYNC_INTERVAL_SEC)
+#       └─ Định kỳ chạy `rclone check` để audit parity
+#
+#  Gate chặn app/litestream-restore khởi chạy trước khi rclone-restore
+#  hoàn tất nằm trong file riêng compose.rclone-gate.yml — chỉ được
+#  dc.sh nạp khi ENABLE_RCLONE=true.
+#
+#  Bật bằng: ENABLE_RCLONE=true
+#  Config:   chỉ cần RCLONE_CONFIG_BASE64 trong .env (không cần file)
+# ================================================================
+
+services:
+  # ── 1. INIT ────────────────────────────────────────────────────
+  rclone-init:
+    container_name: "rclone-init"
+    profiles: [rclone]
+    image: rclone/rclone:latest
+    entrypoint: ["/bin/sh", "/scripts/init.sh"]
+    # Chỉ forward biến cần thiết. Rclone tự map RCLONE_* thành CLI flags,
+    # nên inject toàn bộ .env có thể làm biến rỗng như RCLONE_BWLIMIT fail parse.
+    environment:
+      STACK_RCLONE_CONFIG_BASE64: "${RCLONE_CONFIG_BASE64:-}"
+      STACK_RCLONE_CONFIG_PATH: "/config/rclone/rclone.conf"
+      STACK_RCLONE_REMOTE_TARGET: "${RCLONE_REMOTE_TARGET:-}"
+    volumes:
+      - ./services/rclone/init.sh:/scripts/init.sh:ro
+      # rclone.conf được sinh ra ở đây và share cho 2 service kia
+      - rclone_config:/config/rclone
+    networks: [app_net]
+    restart: "no"
+
+  # ── 2. RESTORE (remote → local) ────────────────────────────────
+  rclone-restore:
+    container_name: "rclone-restore"
+    profiles: [rclone]
+    image: rclone/rclone:latest
+    entrypoint: ["/bin/sh", "/scripts/restore.sh"]
+    environment:
+      STACK_RCLONE_CONFIG_PATH: "/config/rclone/rclone.conf"
+      STACK_RCLONE_LOCAL_PATH: "/data"
+      STACK_RCLONE_REMOTE_TARGET: "${RCLONE_REMOTE_TARGET:-}"
+      STACK_RCLONE_LOG_LEVEL: "${RCLONE_LOG_LEVEL:-INFO}"
+      STACK_RCLONE_TRANSFERS: "${RCLONE_TRANSFERS:-8}"
+      STACK_RCLONE_CHECKERS: "${RCLONE_CHECKERS:-16}"
+      STACK_RCLONE_EXTRA_FLAGS: "${RCLONE_EXTRA_FLAGS:-}"
+    volumes:
+      - ./services/rclone/restore.sh:/scripts/restore.sh:ro
+      - rclone_config:/config/rclone:ro
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}:/data
+    networks: [app_net]
+    restart: "no"
+    depends_on:
+      rclone-init:
+        condition: service_completed_successfully
+
+  # ── 3. SYNC (local → remote, sidecar) ──────────────────────────
+  rclone-sync:
+    container_name: "rclone-sync"
+    profiles: [rclone]
+    image: rclone/rclone:latest
+    entrypoint: ["/bin/sh", "/scripts/sync.sh"]
+    environment:
+      STACK_RCLONE_CONFIG_PATH: "/config/rclone/rclone.conf"
+      STACK_RCLONE_LOCAL_PATH: "/data"
+      STACK_RCLONE_REMOTE_TARGET: "${RCLONE_REMOTE_TARGET:-}"
+      STACK_RCLONE_SYNC_INTERVAL_SEC: "${RCLONE_SYNC_INTERVAL_SEC:-30}"
+      STACK_RCLONE_LOG_LEVEL: "${RCLONE_LOG_LEVEL:-INFO}"
+      STACK_RCLONE_DRY_RUN: "${RCLONE_DRY_RUN:-false}"
+      STACK_RCLONE_TRANSFERS: "${RCLONE_TRANSFERS:-8}"
+      STACK_RCLONE_CHECKERS: "${RCLONE_CHECKERS:-16}"
+      STACK_RCLONE_AUDIT_EVERY: "${RCLONE_AUDIT_EVERY:-10}"
+      STACK_RCLONE_BWLIMIT: "${RCLONE_BWLIMIT:-}"
+      STACK_RCLONE_EXTRA_FLAGS: "${RCLONE_EXTRA_FLAGS:-}"
+    volumes:
+      - ./services/rclone/sync.sh:/scripts/sync.sh:ro
+      - rclone_config:/config/rclone:ro
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}:/data
+    networks: [app_net]
+    restart: unless-stopped
+    depends_on:
+      rclone-restore:
+        condition: service_completed_successfully
+
+# Volume nội bộ chứa rclone.conf đã decode (không nằm trên host
+# → không leak credentials qua bind mount).
+volumes:
+  rclone_config:
+    name: "${PROJECT_NAME:-myapp}_rclone_config"

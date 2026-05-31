@@ -1,0 +1,175 @@
+# Deploy Code API over Cloudflared/Caddy
+#
+# Variables are read from repo .env with VS Code REST Client's {{$dotenv ...}} syntax.
+# Caddy Basic Auth needs the plain password, so this file prompts for it.
+# Before sending protected requests, set DOCKER_DEPLOY_CODE_ENABLED=true and
+# DOCKER_DEPLOY_CODE_API_TOKEN=<long-random-token> in .env, then redeploy.
+
+@domain = {{$dotenv DOMAIN}}
+@baseUrl = https://deploy.{{domain}}
+@apiToken = {{$dotenv DOCKER_DEPLOY_CODE_API_TOKEN}}
+@caddyUser = {{$dotenv CADDY_AUTH_USER}}
+@caddyPassword = {{$prompt caddyPassword}}
+@service = app
+@container = main-app
+@lines = 100
+
+### Health
+GET {{baseUrl}}/health
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+
+### UI HTML
+GET {{baseUrl}}/
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+
+### Status
+GET {{baseUrl}}/status
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+
+### Status through /api alias
+GET {{baseUrl}}/api/status
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+
+### Deploy-code logs
+GET {{baseUrl}}/logs?lines={{lines}}
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+
+### Check git remote
+POST {{baseUrl}}/check
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "fetch": true
+}
+
+### Deploy if remote changed
+POST {{baseUrl}}/deploy
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "force": false
+}
+
+### Force deploy
+# CAUTION: resets the mounted workspace to the configured remote branch.
+POST {{baseUrl}}/deploy
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "force": true
+}
+
+### List compose services
+GET {{baseUrl}}/services
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+
+### List allowed containers
+GET {{baseUrl}}/containers
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+
+### Get service logs
+POST {{baseUrl}}/containers/logs
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"],
+  "lines": {{lines}}
+}
+
+### Get container logs
+POST {{baseUrl}}/containers/logs
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "containers": ["{{container}}"],
+  "lines": {{lines}}
+}
+
+### Inspect container
+POST {{baseUrl}}/containers/inspect
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "containers": ["{{container}}"]
+}
+
+### Start service
+POST {{baseUrl}}/containers/start
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Restart service
+POST {{baseUrl}}/containers/restart
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Rebuild service
+POST {{baseUrl}}/containers/rebuild
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Stop service
+# CAUTION: stops the target compose service.
+POST {{baseUrl}}/containers/stop
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Generic action endpoint
+POST {{baseUrl}}/containers/action
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "action": "restart",
+  "services": ["{{service}}"]
+}
+
+### Upload ZIP source
+# Put a source.zip next to this .http file, or change the path below.
+# CAUTION: applies files to the mounted workspace and can trigger deploy.
+POST {{baseUrl}}/upload-zip
+Authorization: Basic {{caddyUser}} {{caddyPassword}}
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/zip
+x-file-name: source.zip
+
+< ./source.zip

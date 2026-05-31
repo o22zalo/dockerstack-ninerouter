@@ -1,0 +1,147 @@
+project-api.http
+*credentials.json
+-gitignore/**
+.antigravitycli
+# ── Secrets (NEVER commit) ───────────────────────────────────────
+.env
+.env.local
+.env.*.local
+cloudflared-credentials.json
+cloudflared/creds.json
+services/webssh/.ssh/
+# rclone config chứa credentials — không commit
+services/rclone/rclone.conf
+
+# ── Generated at runtime ──────────────────────────────────────────
+logs/app/
+logs/*/
+.docker-volumes/*
+!.docker-volumes/.gitkeep
+# tailscale/serve.json
+
+# ── Node.js ──────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+!services/deploy-code/package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.pnpm-store/
+
+# ── Build output ─────────────────────────────────────────────────
+dist/
+build/
+.next/
+.nuxt/
+out/
+.output/
+.cache/
+.parcel-cache/
+.turbo/
+
+# ── Env variations ───────────────────────────────────────────────
+.env.development
+.env.production
+.env.test
+
+# ── Editor ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+*.swp
+*~
+
+# ── OS ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Misc ─────────────────────────────────────────────────────────
+*.log
+tmp/
+temp/
+.tmp/
+coverage/
+.nyc_output/
+*.tgz
+*.zip
+.opushforce.message
+
+# ── Node.js ──────────────────────────────────────────
+
+# Build output (Node)
+
+# Runtime / temp
+logs/
+
+# ── .NET / C# ────────────────────────────────────────
+bin/
+obj/
+publish/
+*.userosscache
+*.sln.docstates
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+# Visual Studio / Rider
+.vs/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# Test results
+TestResults/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# Publish profiles
+**/Properties/PublishProfiles/*.pubxml
+!**/Properties/PublishProfiles/*.pubxml.user
+
+# ── Shared ────────────────────────────────────────────
+# Env & secrets
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# Editor
+
+# OS
+
+# ── Git O-Alias helpers ───────────────────────
+.git-o-config
+env-docker-stack-template-default-rtdb-tailscale-keep-ip-export.json
+
+# ── Node.js ──────────────────────────────────────────
+
+# Build output (Node)
+
+# Runtime / temp
+
+# ── .NET / C# ────────────────────────────────────────
+
+# NuGet
+
+# Visual Studio / Rider
+
+# Test results
+
+# Publish profiles
+
+# ── Shared ────────────────────────────────────────────
+# Env & secrets
+
+# Editor
+
+# OS

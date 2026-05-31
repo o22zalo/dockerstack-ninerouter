@@ -1,0 +1,259 @@
+# ================================================================
+#  compose.access.yml — Network Access Layer
+#  Tailscale VPN — private mesh for internal team access
+#
+#  Profiles:
+#    tailscale-linux   — kernel TUN mode (full features, Linux host)
+#    tailscale-windows — userspace mode (Windows/WSL2 host)
+#
+#  Required env (when ENABLE_TAILSCALE=true):
+#    TAILSCALE_AUTHKEY, TAILSCALE_TAGS
+#  Optional keep-ip env:
+#    TAILSCALE_KEEP_IP_ENABLE, TAILSCALE_KEEP_IP_FIREBASE_URL (state+certs),
+#    TAILSCALE_KEEP_IP_CERTS_DIR, TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE,
+#    TAILSCALE_KEEP_IP_INTERVAL_SEC,
+#    TAILSCALE_CLIENTID
+# ================================================================
+
+services:
+  # ── Keep IP prepare (Linux profile): optional restore + optional remove hostname ──
+  tailscale-keep-ip-prepare-linux:
+    container_name: "ts-keep-ip-prepare-linux"
+    profiles: [tailscale-linux]
+    image: node:20-alpine
+    command: ["node", "/workspace/tailscale/tailscale-keep-ip.js", "prepare"]
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TAILSCALE_KEEP_IP_ENABLE: "${TAILSCALE_KEEP_IP_ENABLE:-false}"
+      TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE: "${TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE:-}"
+      TAILSCALE_KEEP_IP_FIREBASE_URL: "${TAILSCALE_KEEP_IP_FIREBASE_URL:-}"
+      TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
+      TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+      TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
+      TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
+      TAILSCALE_CLIENTID: "${TAILSCALE_CLIENTID:-}"
+    user: "0:0"
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
+      - ./tailscale:/workspace/tailscale
+    networks: [app_net]
+    restart: "no"
+
+  # ── Keep IP prepare (Windows profile): optional restore + optional remove hostname ─
+  tailscale-keep-ip-prepare-windows:
+    container_name: "ts-keep-ip-prepare-windows"
+    profiles: [tailscale-windows]
+    image: node:20-alpine
+    command: ["node", "/workspace/tailscale/tailscale-keep-ip.js", "prepare"]
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TAILSCALE_KEEP_IP_ENABLE: "${TAILSCALE_KEEP_IP_ENABLE:-false}"
+      TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE: "${TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE:-}"
+      TAILSCALE_KEEP_IP_FIREBASE_URL: "${TAILSCALE_KEEP_IP_FIREBASE_URL:-}"
+      TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
+      TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+      TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
+      TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
+      TAILSCALE_CLIENTID: "${TAILSCALE_CLIENTID:-}"
+    user: "0:0"
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
+      - ./tailscale:/workspace/tailscale
+    networks: [app_net]
+    restart: "no"
+
+  # ── Tailscale: Linux kernel mode (NET_ADMIN + TUN) ─────────────
+  tailscale-linux:
+    container_name: "ts-linux"
+    profiles: [tailscale-linux]
+    image: tailscale/tailscale:stable
+    hostname: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+    depends_on:
+      tailscale-keep-ip-prepare-linux:
+        condition: service_completed_successfully
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TS_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
+      TS_USERSPACE: "false"
+      TS_SOCKET: "${TAILSCALE_SOCKET:-/tmp/tailscaled.sock}"
+      TS_SERVE_CONFIG: /config/serve/serve.json
+      TS_EXTRA_ARGS: >-
+        --advertise-tags=${TAILSCALE_TAGS:-tag:container}
+        --accept-dns=${TAILSCALE_ACCEPT_DNS:-false}
+        --accept-routes
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
+      - ./tailscale:/config/serve
+      - tailscale-socket:/tmp
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    network_mode: host
+    restart: unless-stopped
+
+  # ── Tailscale: Windows/WSL2 userspace mode ─────────────────────
+  tailscale-windows:
+    container_name: "ts-windows"
+    profiles: [tailscale-windows]
+    image: tailscale/tailscale:stable
+    hostname: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+    depends_on:
+      tailscale-keep-ip-prepare-windows:
+        condition: service_completed_successfully
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TS_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
+      TS_USERSPACE: "true"
+      TS_SOCKET: "${TAILSCALE_SOCKET:-/tmp/tailscaled.sock}"
+      TS_SERVE_CONFIG: /config/serve/serve.json
+      TS_EXTRA_ARGS: >-
+        --advertise-tags=${TAILSCALE_TAGS:-tag:container}
+        --accept-dns=${TAILSCALE_ACCEPT_DNS:-false}
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
+      - ./tailscale:/config/serve
+      - tailscale-socket:/tmp
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── Watchdog (Linux profile): monitor tailscale status/log only ───────
+  tailscale-watchdog-linux:
+    container_name: "ts-watchdog-linux"
+    profiles: [tailscale-linux]
+    build:
+      context: .
+      dockerfile: tailscale/Dockerfile.watchdog
+    depends_on:
+      tailscale-linux:
+        condition: service_started
+    command: ["node", "/workspace/tailscale/tailscale-watchdog.js"]
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TAILSCALE_WATCHDOG_MODE: "${TAILSCALE_WATCHDOG_MODE:-heal}"
+      TAILSCALE_WATCHDOG_INTERVAL_SEC: "${TAILSCALE_WATCHDOG_INTERVAL_SEC:-30}"
+      TAILSCALE_WATCHDOG_ALERT_EVERY: "${TAILSCALE_WATCHDOG_ALERT_EVERY:-5}"
+      TAILSCALE_WATCHDOG_LOG_OK_EVERY: "${TAILSCALE_WATCHDOG_LOG_OK_EVERY:-10}"
+      TAILSCALE_WATCHDOG_NETCHECK: "${TAILSCALE_WATCHDOG_NETCHECK:-true}"
+      TAILSCALE_WATCHDOG_RECONNECT_MIN_SEC: "${TAILSCALE_WATCHDOG_RECONNECT_MIN_SEC:-60}"
+      TAILSCALE_WATCHDOG_HEAL_AFTER_STREAK: "${TAILSCALE_WATCHDOG_HEAL_AFTER_STREAK:-2}"
+      TAILSCALE_WATCHDOG_UP_ACCEPT_DNS: "${TAILSCALE_WATCHDOG_UP_ACCEPT_DNS:-false}"
+      # Sidecar cannot safely inspect tailscale container resolv.conf; use health/netcheck instead.
+      TAILSCALE_WATCHDOG_DNS_CHECK: "${TAILSCALE_WATCHDOG_DNS_CHECK:-false}"
+      TAILSCALE_WATCHDOG_AUTO_RECONNECT: "true"
+      TAILSCALE_WATCHDOG_DNS_FIX: "false"
+      TAILSCALE_SOCKET: "${TAILSCALE_SOCKET:-/tmp/tailscaled.sock}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+    user: "0:0"
+    volumes:
+      - ./tailscale:/workspace/tailscale:ro
+      - tailscale-socket:/tmp
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── Watchdog (Windows profile): monitor tailscale status/log only ─────
+  tailscale-watchdog-windows:
+    container_name: "ts-watchdog-windows"
+    profiles: [tailscale-windows]
+    build:
+      context: .
+      dockerfile: tailscale/Dockerfile.watchdog
+    depends_on:
+      tailscale-windows:
+        condition: service_started
+    command: ["node", "/workspace/tailscale/tailscale-watchdog.js"]
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TAILSCALE_WATCHDOG_MODE: "${TAILSCALE_WATCHDOG_MODE:-heal}"
+      TAILSCALE_WATCHDOG_INTERVAL_SEC: "${TAILSCALE_WATCHDOG_INTERVAL_SEC:-30}"
+      TAILSCALE_WATCHDOG_ALERT_EVERY: "${TAILSCALE_WATCHDOG_ALERT_EVERY:-5}"
+      TAILSCALE_WATCHDOG_LOG_OK_EVERY: "${TAILSCALE_WATCHDOG_LOG_OK_EVERY:-10}"
+      TAILSCALE_WATCHDOG_NETCHECK: "${TAILSCALE_WATCHDOG_NETCHECK:-true}"
+      TAILSCALE_WATCHDOG_RECONNECT_MIN_SEC: "${TAILSCALE_WATCHDOG_RECONNECT_MIN_SEC:-60}"
+      TAILSCALE_WATCHDOG_HEAL_AFTER_STREAK: "${TAILSCALE_WATCHDOG_HEAL_AFTER_STREAK:-2}"
+      TAILSCALE_WATCHDOG_UP_ACCEPT_DNS: "${TAILSCALE_WATCHDOG_UP_ACCEPT_DNS:-false}"
+      # Sidecar cannot safely inspect tailscale container resolv.conf; use health/netcheck instead.
+      TAILSCALE_WATCHDOG_DNS_CHECK: "${TAILSCALE_WATCHDOG_DNS_CHECK:-false}"
+      TAILSCALE_WATCHDOG_AUTO_RECONNECT: "true"
+      TAILSCALE_WATCHDOG_DNS_FIX: "false"
+      TAILSCALE_SOCKET: "${TAILSCALE_SOCKET:-/tmp/tailscaled.sock}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+    user: "0:0"
+    volumes:
+      - ./tailscale:/workspace/tailscale:ro
+      - tailscale-socket:/tmp
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── Keep IP backup loop (Linux profile): upload state periodically ─────
+  tailscale-keep-ip-backup-linux:
+    container_name: "ts-keep-ip-backup-linux"
+    profiles: [tailscale-linux]
+    image: node:20-alpine
+    depends_on:
+      tailscale-linux:
+        condition: service_started
+    command: ["node", "/workspace/tailscale/tailscale-keep-ip.js", "backup-loop"]
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TAILSCALE_KEEP_IP_ENABLE: "${TAILSCALE_KEEP_IP_ENABLE:-false}"
+      TAILSCALE_KEEP_IP_FIREBASE_URL: "${TAILSCALE_KEEP_IP_FIREBASE_URL:-}"
+      TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
+      TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
+      TAILSCALE_KEEP_IP_INTERVAL_SEC: "${TAILSCALE_KEEP_IP_INTERVAL_SEC:-30}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+      TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
+    user: "0:0"
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
+      - ./tailscale:/workspace/tailscale
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── Keep IP backup loop (Windows profile): upload state periodically ───
+  tailscale-keep-ip-backup-windows:
+    container_name: "ts-keep-ip-backup-windows"
+    profiles: [tailscale-windows]
+    image: node:20-alpine
+    depends_on:
+      tailscale-windows:
+        condition: service_started
+    command: ["node", "/workspace/tailscale/tailscale-keep-ip.js", "backup-loop"]
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
+    environment:
+      TAILSCALE_KEEP_IP_ENABLE: "${TAILSCALE_KEEP_IP_ENABLE:-false}"
+      TAILSCALE_KEEP_IP_FIREBASE_URL: "${TAILSCALE_KEEP_IP_FIREBASE_URL:-}"
+      TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
+      TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
+      TAILSCALE_KEEP_IP_INTERVAL_SEC: "${TAILSCALE_KEEP_IP_INTERVAL_SEC:-30}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
+      TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
+    user: "0:0"
+    volumes:
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
+      - ./tailscale:/workspace/tailscale
+    networks: [app_net]
+    restart: unless-stopped
+
+volumes:
+  tailscale-socket:

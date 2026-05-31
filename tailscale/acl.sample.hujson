@@ -1,0 +1,38 @@
+{
+  "grants": [
+    {
+      "src": [
+        "*"
+      ],
+      "dst": [
+        "*"
+      ],
+      "ip": [
+        "*"
+      ]
+    }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src": [
+        "tag:ci"
+      ],
+      "dst": [
+        "tag:ci"
+      ],
+      "users": [
+        "autogroup:nonroot",
+        "root"
+      ]
+    }
+  ],
+  "tagOwners": {
+    "tag:ci": [
+      "autogroup:admin"
+    ],
+    "tag:container": [
+      "autogroup:admin"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+# ─── .cloneignore ───────────────────────────────────────────────────────────
+# File này nằm cùng thư mục với clone-stack.js (scripts/).
+# Liệt kê các file/thư mục KHÔNG được copy khi chạy clone-stack.
+#
+# Cú pháp:
+#   tên/path chính xác  →  cloudflared/config.yml
+#   wildcard đơn        →  *.log
+#   glob sâu            →  scripts/**
+# ────────────────────────────────────────────────────────────────────────────
+
+# Cloudflare tunnel — credentials nhạy cảm, không clone sang
+cloudflared/config.yml
+cloudflared/credentials.json
+.env.local
+
+# Toàn bộ thư mục scripts (bao gồm cả clone-stack.js và file này)
+scripts/**

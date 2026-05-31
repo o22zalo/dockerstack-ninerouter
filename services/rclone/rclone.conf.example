@@ -1,0 +1,280 @@
+# ================================================================
+#  rclone.conf — Cấu hình rclone cho docker-stack
+#
+#  Trong stack này, file rclone.conf KHÔNG được mount trực tiếp từ host.
+#  Thay vào đó, .env chứa biến RCLONE_CONFIG_BASE64 = base64 của file này.
+#  Service rclone-init sẽ decode và ghi ra /config/rclone/rclone.conf
+#  bên trong container.
+#
+#  Quy trình tạo .env credential:
+#    1. Sửa file này theo cấu hình thật của bạn (xem ví dụ bên dưới).
+#    2. Chạy:  base64 -w 0 services/rclone/rclone.conf
+#       (Windows PowerShell:  [Convert]::ToBase64String([IO.File]::ReadAllBytes("services/rclone/rclone.conf")) )
+#    3. Copy chuỗi base64 vào .env:
+#         RCLONE_CONFIG_BASE64=<chuỗi base64>
+#    4. Đặt RCLONE_REMOTE_TARGET trong .env, ví dụ:
+#         RCLONE_REMOTE_TARGET=remote_store:my-bucket/docker-volumes
+#       Chính là <tên_remote>:<bucket>/<path>
+#
+#  Lưu ý:
+#    • File này có thể commit lên git (chứa placeholder),
+#      nhưng KHÔNG commit file đã điền credentials thật.
+#    • .gitignore đã chặn services/rclone/rclone.conf (đã điền).
+#    • RCLONE_CONFIG_BASE64 trong .env là dạng final, KHÔNG commit.
+#
+#  Mục tiêu kiến trúc:
+#    Local (.docker-volumes) là buffer ghi nhanh (disk gốc).
+#    rclone-sync sidecar đẩy local → remote async, không chặn write.
+#    rclone-restore kéo remote → local 1 lần khi container khởi động.
+# ================================================================
+
+
+# ════════════════════════════════════════════════════════════════
+#  VÍ DỤ 1 — Một remote duy nhất (đơn giản, dùng nhiều nhất)
+#
+#  Phù hợp khi: chỉ có 1 đích backup (1 bucket S3, 1 SFTP).
+#  Trong .env:  RCLONE_REMOTE_TARGET=remote_store:my-bucket/data
+# ════════════════════════════════════════════════════════════════
+
+# ── 1A. Cloudflare R2 (S3-compatible, recommended) ──────────────
+# Lấy credentials: https://dash.cloudflare.com → R2 → Manage R2 API Tokens
+[remote_store]
+type = s3
+provider = Cloudflare
+env_auth = false
+access_key_id = REPLACE_ME_R2_ACCESS_KEY
+secret_access_key = REPLACE_ME_R2_SECRET_KEY
+endpoint = https://REPLACE_ME_ACCOUNT_ID.r2.cloudflarestorage.com
+acl = private
+# region không cần với R2 — bỏ trống
+
+# ── 1B. AWS S3 ──────────────────────────────────────────────────
+# [remote_store]
+# type = s3
+# provider = AWS
+# env_auth = false
+# access_key_id = AKIA...
+# secret_access_key = ...
+# region = us-east-1
+# acl = private
+
+# ── 1C. Backblaze B2 ────────────────────────────────────────────
+# [remote_store]
+# type = b2
+# account = REPLACE_ME_B2_KEY_ID
+# key = REPLACE_ME_B2_APPLICATION_KEY
+# hard_delete = false
+
+# ── 1D. MinIO (self-hosted S3) ─────────────────────────────────
+# [remote_store]
+# type = s3
+# provider = Minio
+# env_auth = false
+# access_key_id = minio
+# secret_access_key = minio123
+# endpoint = http://minio.example.com:9000
+# acl = private
+
+# ── 1E. SFTP (server qua SSH) ──────────────────────────────────
+# [remote_store]
+# type = sftp
+# host = backup.example.com
+# user = backup
+# port = 22
+# # Cách 1: dùng password
+# pass = REPLACE_ME_OBSCURED  # chạy `rclone obscure 'mypassword'` để có giá trị này
+# # Cách 2: dùng key file (đặt key trong services/rclone/keys/, mount thêm vào volume)
+# # key_file = /config/rclone/keys/id_rsa
+
+# ── 1F. WebDAV (Nextcloud, Synology, ...) ──────────────────────
+# [remote_store]
+# type = webdav
+# url = https://cloud.example.com/remote.php/dav/files/myuser/
+# vendor = nextcloud
+# user = myuser
+# pass = REPLACE_ME_OBSCURED
+
+# ── 1G. Google Drive (cá nhân) ─────────────────────────────────
+# Cách lấy token: chạy `rclone config` trên máy có browser → tạo remote
+# loại drive → copy section [name] vào đây.
+# [remote_store]
+# type = drive
+# client_id = REPLACE_ME
+# client_secret = REPLACE_ME
+# scope = drive
+# token = {"access_token":"...","refresh_token":"...","expiry":"..."}
+
+
+# ════════════════════════════════════════════════════════════════
+#  VÍ DỤ 2 — Hai remote (primary + secondary backup)
+#
+#  Mục đích: có 2 đích backup riêng biệt (ví dụ: R2 chính, B2 backup phụ).
+#  Trong .env, bạn có thể trỏ RCLONE_REMOTE_TARGET vào "combined:" để
+#  ghi đồng thời cả hai (xem ví dụ 3), hoặc tạo 2 stack riêng nếu
+#  muốn lịch trình khác nhau.
+# ════════════════════════════════════════════════════════════════
+
+# [r2_primary]
+# type = s3
+# provider = Cloudflare
+# access_key_id = R2_KEY
+# secret_access_key = R2_SECRET
+# endpoint = https://acct.r2.cloudflarestorage.com
+#
+# [b2_backup]
+# type = b2
+# account = B2_KEY_ID
+# key = B2_APP_KEY
+
+
+# ════════════════════════════════════════════════════════════════
+#  VÍ DỤ 3 — Union (combine) nhiều remote
+#
+#  Mục đích: ghi cùng lúc lên N remotes, đọc trả về union.
+#  Phù hợp khi: cần redundancy (mất 1 remote vẫn còn 1 cái khác).
+#
+#  Trong .env:  RCLONE_REMOTE_TARGET=combined:my-bucket/data
+#
+#  Tham số:
+#    upstreams       danh sách remote thành phần, cách nhau bằng space
+#    action_policy   nơi áp dụng thao tác sửa/xóa (epall = tất cả)
+#    create_policy   nơi tạo file mới (epall = tất cả → ghi đa đích)
+#    search_policy   nơi tìm file khi đọc (ff = first found)
+#
+#  Tham khảo: https://rclone.org/union/
+# ════════════════════════════════════════════════════════════════
+
+# [r2_primary]
+# type = s3
+# provider = Cloudflare
+# access_key_id = R2_KEY
+# secret_access_key = R2_SECRET
+# endpoint = https://acct.r2.cloudflarestorage.com
+#
+# [b2_backup]
+# type = b2
+# account = B2_KEY_ID
+# key = B2_APP_KEY
+#
+# [combined]
+# type = union
+# upstreams = r2_primary:my-bucket/data b2_backup:my-bucket/data
+# action_policy = epall
+# create_policy = epall
+# search_policy = ff
+
+
+# ════════════════════════════════════════════════════════════════
+#  VÍ DỤ 4 — Crypt (mã hoá phía client trước khi đẩy lên cloud)
+#
+#  Mục đích: data đẩy lên remote sẽ được mã hoá AES,
+#            ngay cả admin của remote cũng không đọc được.
+#
+#  Trong .env: RCLONE_REMOTE_TARGET=secret:
+#
+#  Bước:
+#    1. Sinh password:  rclone obscure 'your-strong-password'
+#    2. Sinh salt:       rclone obscure 'your-strong-salt'
+#    3. Điền vào password / password2 (KHÔNG dùng plaintext)
+#
+#  Tham khảo: https://rclone.org/crypt/
+# ════════════════════════════════════════════════════════════════
+
+# [r2_raw]
+# type = s3
+# provider = Cloudflare
+# access_key_id = R2_KEY
+# secret_access_key = R2_SECRET
+# endpoint = https://acct.r2.cloudflarestorage.com
+#
+# [secret]
+# type = crypt
+# remote = r2_raw:my-encrypted-bucket
+# filename_encryption = standard
+# directory_name_encryption = true
+# password = REPLACE_ME_OBSCURED_PASSWORD
+# password2 = REPLACE_ME_OBSCURED_SALT
+
+
+# ════════════════════════════════════════════════════════════════
+#  VÍ DỤ 5 — Cache wrapper (giảm latency đọc khi remote chậm)
+#
+#  Cache thường KHÔNG cần thiết trong stack này vì local
+#  (.docker-volumes) đã là buffer ghi nhanh — app đọc/ghi local
+#  trực tiếp, rclone chỉ làm nhiệm vụ async push/pull.
+#
+#  Block dưới đây giữ lại để tham khảo.
+# ════════════════════════════════════════════════════════════════
+
+# [r2_raw]
+# type = s3
+# provider = Cloudflare
+# access_key_id = R2_KEY
+# secret_access_key = R2_SECRET
+# endpoint = https://acct.r2.cloudflarestorage.com
+#
+# [cached]
+# type = cache
+# remote = r2_raw:my-bucket
+# chunk_size = 5M
+# info_age = 1h
+# chunk_total_size = 10G
+
+
+# ════════════════════════════════════════════════════════════════
+#  VÍ DỤ 6 — Chain: Crypt over Union (kết hợp redundancy + mã hoá)
+#
+#  Trong .env: RCLONE_REMOTE_TARGET=secret_combined:
+# ════════════════════════════════════════════════════════════════
+
+# [r2_primary]
+# type = s3
+# provider = Cloudflare
+# access_key_id = R2_KEY
+# secret_access_key = R2_SECRET
+# endpoint = https://acct.r2.cloudflarestorage.com
+#
+# [b2_backup]
+# type = b2
+# account = B2_KEY_ID
+# key = B2_APP_KEY
+#
+# [combined_raw]
+# type = union
+# upstreams = r2_primary:my-bucket/data b2_backup:my-bucket/data
+# action_policy = epall
+# create_policy = epall
+# search_policy = ff
+#
+# [secret_combined]
+# type = crypt
+# remote = combined_raw:
+# password = REPLACE_ME_OBSCURED
+# password2 = REPLACE_ME_OBSCURED
+
+
+# ════════════════════════════════════════════════════════════════
+#  CHEATSHEET
+# ════════════════════════════════════════════════════════════════
+#
+#  Encode file này → .env:
+#    Linux/macOS:   base64 -w 0 services/rclone/rclone.conf
+#    Windows PS:    [Convert]::ToBase64String([IO.File]::ReadAllBytes("services/rclone/rclone.conf"))
+#
+#  Test config (sau khi điền base64 vào .env):
+#    docker compose --profile rclone run --rm rclone-init
+#    docker compose --profile rclone run --rm rclone-restore
+#
+#  Test list:
+#    docker compose --profile rclone run --rm \
+#      --entrypoint sh rclone-sync -c \
+#      'rclone --config /config/rclone/rclone.conf lsd ${RCLONE_REMOTE_TARGET%%:*}:'
+#
+#  Obscure password (rclone yêu cầu password đã obscure):
+#    docker run --rm rclone/rclone obscure 'your-password'
+#
+#  Tài liệu:
+#    https://rclone.org/docs/
+#    https://rclone.org/s3/
+#    https://rclone.org/union/
+#    https://rclone.org/crypt/

@@ -1,0 +1,105 @@
+# Path: .github/workflows/deploy.yml
+# Deploys the modular Docker Compose stack via dc.sh.
+# Supports both ubuntu-latest and windows-latest runners.
+
+name: docker-stack-template
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "3 0 * * *" # 07:03 ICT
+    - cron: "3 1 * * *" # 08:03 ICT
+    - cron: "3 2 * * *" # 09:03 ICT
+    - cron: "3 3 * * *" # 10:03 ICT
+    - cron: "3 4 * * *" # 11:03 ICT
+    - cron: "3 5 * * *" # 12:03 ICT
+    - cron: "3 6 * * *" # 13:03 ICT
+    - cron: "3 7 * * *" # 14:03 ICT
+    - cron: "3 8 * * *" # 15:03 ICT
+    - cron: "3 9 * * *" # 16:03 ICT
+    - cron: "3 10 * * *" # 17:03 ICT
+    - cron: "3 11 * * *" # 18:03 ICT
+    - cron: "3 12 * * *" # 19:03 ICT
+    - cron: "3 13 * * *" # 20:03 ICT
+    - cron: "3 14 * * *" # 21:03 ICT
+    - cron: "3 15 * * *" # 22:03 ICT
+    - cron: "3 16 * * *" # 23:03 ICT
+    - cron: "3 17 * * *" # 00:03 ICT
+    - cron: "3 18 * * *" # 01:03 ICT
+    - cron: "3 19 * * *" # 02:03 ICT
+    - cron: "3 20 * * *" # 03:03 ICT
+    - cron: "3 21 * * *" # 04:03 ICT
+    - cron: "3 22 * * *" # 05:03 ICT
+    - cron: "3 23 * * *" # 06:03 ICT
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  DOTENVRTDB_URL: ${{ secrets.DOTENVRTDB_URL }}
+  STOP_RUNNER_ID: "${{ github.run_id }}-${{ github.run_attempt }}"
+  STOP_LISTENER_ENABLED: "true"
+
+jobs:
+  deploy:
+    # ✅ Switch runner here: ubuntu-latest | windows-latest
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    if: >-
+      (github.event_name == 'workflow_dispatch')
+      ||
+      (github.event_name == 'push' && github.repository == 'o861cloudflare/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'push' && github.repository == 'o861cloudflare/dockerstack-s3proxy-2')
+      || 
+      (github.event_name == 'schedule' && github.event.schedule == '3 0 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 1 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 2 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 3 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 4 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 5 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 6 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 7 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 8 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 9 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 10 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 11 * * *' && github.repository == 'hoaihoa981/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 12 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 13 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 14 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 15 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 16 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 17 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 18 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 19 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 20 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 21 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 22 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+      ||
+      (github.event_name == 'schedule' && github.event.schedule == '3 23 * * *' && github.repository == 'hauo8627/dockerstack-s3proxy')
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/runs

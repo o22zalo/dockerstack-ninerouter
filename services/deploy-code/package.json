@@ -1,0 +1,14 @@
+{
+  "name": "docker-deploy-code-sidecar",
+  "version": "1.0.0",
+  "description": "Internal sidecar for git/zip based code deployment and targeted Docker Compose redeploys.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,156 @@
+# Deploy Code API over Tailscale direct host port
+#
+# Variables are read from repo .env with VS Code REST Client's {{$dotenv ...}} syntax.
+# This route goes directly to the host-published deploy-code port, so it does not
+# use Caddy Basic Auth. If DOCKER_DEPLOY_CODE_REQUIRE_TOKEN=true, the API token is
+# still required.
+
+@tailnetDomain = {{$dotenv TAILSCALE_TAILNET_DOMAIN}}
+@tailnetHost = {{$dotenv PROJECT_NAME_TAILSCALE}}
+@port = {{$dotenv DOCKER_DEPLOY_CODE_HOST_PORT}}
+@baseUrl = http://{{tailnetHost}}.{{tailnetDomain}}:{{port}}
+@apiToken = {{$dotenv DOCKER_DEPLOY_CODE_API_TOKEN}}
+@service = app
+@container = main-app
+@lines = 100
+
+### Health
+GET {{baseUrl}}/health
+
+### UI HTML
+GET {{baseUrl}}/
+x-deploy-code-token: {{apiToken}}
+
+### Status
+GET {{baseUrl}}/status
+x-deploy-code-token: {{apiToken}}
+
+### Status through /api alias
+GET {{baseUrl}}/api/status
+x-deploy-code-token: {{apiToken}}
+
+### Deploy-code logs
+GET {{baseUrl}}/logs?lines={{lines}}
+x-deploy-code-token: {{apiToken}}
+
+### Check git remote
+POST {{baseUrl}}/check
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "fetch": true
+}
+
+### Deploy if remote changed
+POST {{baseUrl}}/deploy
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "force": false
+}
+
+### Force deploy
+# CAUTION: resets the mounted workspace to the configured remote branch.
+POST {{baseUrl}}/deploy
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "force": true
+}
+
+### List compose services
+GET {{baseUrl}}/services
+x-deploy-code-token: {{apiToken}}
+
+### List allowed containers
+GET {{baseUrl}}/containers
+x-deploy-code-token: {{apiToken}}
+
+### Get service logs
+POST {{baseUrl}}/containers/logs
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"],
+  "lines": {{lines}}
+}
+
+### Get container logs
+POST {{baseUrl}}/containers/logs
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "containers": ["{{container}}"],
+  "lines": {{lines}}
+}
+
+### Inspect container
+POST {{baseUrl}}/containers/inspect
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "containers": ["{{container}}"]
+}
+
+### Start service
+POST {{baseUrl}}/containers/start
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Restart service
+POST {{baseUrl}}/containers/restart
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Rebuild service
+POST {{baseUrl}}/containers/rebuild
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Stop service
+# CAUTION: stops the target compose service.
+POST {{baseUrl}}/containers/stop
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "services": ["{{service}}"]
+}
+
+### Generic action endpoint
+POST {{baseUrl}}/containers/action
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/json
+
+{
+  "action": "restart",
+  "services": ["{{service}}"]
+}
+
+### Upload ZIP source
+# Put a source.zip next to this .http file, or change the path below.
+# CAUTION: applies files to the mounted workspace and can trigger deploy.
+POST {{baseUrl}}/upload-zip
+x-deploy-code-token: {{apiToken}}
+Content-Type: application/zip
+x-file-name: source.zip
+
+< ./source.zip
